@@ -6,11 +6,11 @@ const express = require('express');
 const { exec } = require('child_process');
 
 // === Bot & Express Setup ===
-const bot = new Telegraf('8038019851:AAFNX7Uwo3hujbkrWU4G_ybn43s0DXe-1xs');; // ← Replace with your token
+const bot = new Telegraf('8038019851:AAFNX7Uwo3hujbkrWU4G_ybn43s0DXe-1xs'); // ⬅️ Replace with your bot token
 const app = express();
 app.use(express.json());
 app.use(bot.webhookCallback('/'));
-bot.telegram.setWebhook('https://my-bot-tcj8.onrender.com');
+bot.telegram.setWebhook('https://my-bot-tcj8.onrender.com'); // ⬅️ Replace with your Render URL
 
 // === Log Setup ===
 const logFilePath = path.join(__dirname, 'chat_logs.json');
@@ -55,7 +55,7 @@ bot.command('location', (ctx) => {
   });
 });
 
-// === AI Fallback Endpoints ===
+// === GiftedTech AI Endpoints ===
 const aiEndpoints = [
   'https://api.giftedtech.co.ke/api/ai/gpt4o',
   'https://api.giftedtech.co.ke/api/ai/geminiaipro',
@@ -93,8 +93,6 @@ bot.on('text', async (ctx) => {
 });
 
 // === Optional: Image Vision Handler ===
-//Uncomment this if you want image description too
-
 bot.on('photo', async (ctx) => {
   const fileId = ctx.message.photo.pop().file_id;
   const fileLink = await ctx.telegram.getFileLink(fileId);
@@ -113,7 +111,6 @@ bot.on('photo', async (ctx) => {
     ctx.reply('⚠️ Failed to describe the image.');
   }
 });
-
 
 // === Start Express Server ===
 const PORT = process.env.PORT || 3000;
