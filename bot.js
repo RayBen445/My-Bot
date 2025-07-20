@@ -6,7 +6,7 @@ const express = require('express');
 const { exec } = require('child_process');
 
 // === Bot & Express Setup ===
-const bot = new Telegraf8038019851:AAFNX7Uwo3hujbkrWU4G_ybn43s0DXe-1xs; // ← Replace with your token
+const bot = new Telegraf('8038019851:AAFNX7Uwo3hujbkrWU4G_ybn43s0DXe-1xs');; // ← Replace with your token
 const app = express();
 app.use(express.json());
 app.use(bot.webhookCallback('/'));
