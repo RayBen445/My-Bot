@@ -6,11 +6,11 @@ const express = require('express');
 const { exec } = require('child_process');
 
 // === Bot & Express Setup ===
-const bot = new Telegraf('8038019851:AAFNX7Uwo3hujbkrWU4G_ybn43s0DXe-1xs'); // ⬅️ Replace with your bot token
+const bot = new Telegraf('8038019851:AAFNX7Uwo3hujbkrWU4G_ybn43s0DXe-1xs'); // ⬅️ Your bot token
 const app = express();
 app.use(express.json());
 app.use(bot.webhookCallback('/'));
-bot.telegram.setWebhook('https://my-bot-tcj8.onrender.com'); // ⬅️ Replace with your Render URL
+bot.telegram.setWebhook('https://my-bot-tcj8.onrender.com'); // ⬅️ Your Render URL
 
 // === Log Setup ===
 const logFilePath = path.join(__dirname, 'chat_logs.json');
@@ -26,9 +26,20 @@ function saveLogs() {
   fs.writeFileSync(logFilePath, JSON.stringify(chatLogs, null, 2));
 }
 
+// === Admin IDs ===
+const ADMINS = [6649936329]; // ⬅️ Add your Telegram user ID(s) here
+
 // === Welcome Commands ===
 bot.start((ctx) => ctx.reply('👋 Welcome! I am your AI bot. Type any question, and I’ll reply!'));
 bot.help((ctx) => ctx.reply('💡 Just send me a message and I’ll reply using GiftedTech AI.'));
+
+// === Admin-only Command ===
+bot.command('admin', (ctx) => {
+  if (!ADMINS.includes(ctx.from.id)) {
+    return ctx.reply('🚫 You are not authorized to use this command.');
+  }
+  ctx.reply('✅ Hello Admin! This is a protected command.');
+});
 
 // === Termux Commands ===
 bot.command('battery', (ctx) => {
@@ -64,7 +75,7 @@ const aiEndpoints = [
   'https://api.giftedtech.co.ke/api/ai/ai'
 ];
 
-// === AI Message Handler with Fallback ===
+// === AI Message Handler with Fallbacks ===
 bot.on('text', async (ctx) => {
   await ctx.sendChatAction('typing');
   const userMessage = ctx.message.text;
@@ -72,6 +83,8 @@ bot.on('text', async (ctx) => {
   const userId = ctx.from.id;
 
   let aiReply = "🤖 I couldn't generate a response.";
+
+  // GiftedTech fallback loop
   for (let url of aiEndpoints) {
     try {
       const res = await axios.get(url, {
@@ -82,8 +95,25 @@ bot.on('text', async (ctx) => {
         aiReply = res.data.result;
         break;
       }
-    } catch (err) {
+    } catch {
       console.warn(`❌ Failed API: ${url}`);
+    }
+  }
+
+  // Backup: Free OpenAI proxy if all GiftedTech failed
+  if (aiReply.includes("couldn't")) {
+    try {
+      const response = await axios.post('https://free.churchless.tech/v1/chat/completions', {
+        model: 'gpt-3.5-turbo',
+        messages: [{ role: 'user', content: userMessage }],
+      }, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
+
+      aiReply = response.data.choices?.[0]?.message?.content || aiReply;
+    } catch (err) {
+      console.warn('❌ Backup OpenAI proxy also failed.');
     }
   }
 
@@ -92,7 +122,7 @@ bot.on('text', async (ctx) => {
   saveLogs();
 });
 
-// === Optional: Image Vision Handler ===
+// === Image Vision Handler ===
 bot.on('photo', async (ctx) => {
   const fileId = ctx.message.photo.pop().file_id;
   const fileLink = await ctx.telegram.getFileLink(fileId);
@@ -107,7 +137,7 @@ bot.on('photo', async (ctx) => {
       }
     });
     ctx.reply(res.data.result || '🖼️ No description returned.');
-  } catch (err) {
+  } catch {
     ctx.reply('⚠️ Failed to describe the image.');
   }
 });
