@@ -1,43 +1,30 @@
+// 🚀 Full Telegram Bot with Admin Panel, Games, Font Switcher, AI Tools
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
-const { exec } = require('child_process');
+const os = require('os');
 
-// === Environment Setup ===
 const isTermux = false;
-const bot = new Telegraf('8038019851:AAFNX7Uwo3hujbkrWU4G_ybn43s0DXe-1xs'); // <-- Insert token
+const bot = new Telegraf('8038019851:AAFNX7Uwo3hujbkrWU4G_ybn43s0DXe-1xs');
 const app = express();
 app.use(express.json());
 app.use(bot.webhookCallback('/'));
-bot.telegram.setWebhook('https://my-bot-tcj8.onrender.com'); // <-- Insert Render URL
+bot.telegram.setWebhook('https://my-bot-tcj8.onrender.com');
 
-// === Logs Setup ===
+const ADMINS = [6649936329];
+const adminOnly = (ctx) => ADMINS.includes(ctx.from.id);
+
+// === File Paths ===
 const logFilePath = path.join(__dirname, 'chat_logs.json');
-let chatLogs = [];
-if (fs.existsSync(logFilePath)) {
-  try {
-    chatLogs = JSON.parse(fs.readFileSync(logFilePath));
-  } catch {
-    chatLogs = [];
-  }
-}
-function saveLogs() {
-  fs.writeFileSync(logFilePath, JSON.stringify(chatLogs, null, 2));
-}
-
-// === Font Setup ===
 const fontFilePath = path.join(__dirname, 'font_config.json');
-let currentFont = 'normal';
-if (fs.existsSync(fontFilePath)) {
-  try {
-    currentFont = JSON.parse(fs.readFileSync(fontFilePath)).font;
-  } catch {}
-}
-function saveFont(font) {
-  fs.writeFileSync(fontFilePath, JSON.stringify({ font }));
-}
+
+let chatLogs = fs.existsSync(logFilePath) ? JSON.parse(fs.readFileSync(logFilePath)) : [];
+const saveLogs = () => fs.writeFileSync(logFilePath, JSON.stringify(chatLogs, null, 2));
+
+let currentFont = fs.existsSync(fontFilePath) ? JSON.parse(fs.readFileSync(fontFilePath)).font : 'normal';
+const saveFont = (font) => fs.writeFileSync(fontFilePath, JSON.stringify({ font }));
 
 const fonts = {
   normal: (t) => t,
@@ -48,124 +35,139 @@ const fonts = {
   script: (t) => t.replace(/[a-z]/g, c => String.fromCodePoint(0x1D4EA + c.charCodeAt(0) - 97))
 };
 
-function stylize(t) {
-  return fonts[currentFont] ? fonts[currentFont](t) : t;
-}
+const stylize = (t) => fonts[currentFont] ? fonts[currentFont](t) : t;
 
-// === Admin Setup ===
-const ADMINS = [6649936329];
-const adminMenuText = '✅ Admin Panel — Choose a command:';
-const adminKeyboard = Markup.inlineKeyboard([
+const adminPanel = Markup.inlineKeyboard([
   [Markup.button.callback('📊 Stats', 'admin_stats')],
-  [Markup.button.callback('📁 Download Logs', 'admin_logs')],
-  [Markup.button.callback('🗑️ Clear Logs', 'admin_clearlogs')],
-  [Markup.button.callback('🖼️ Generate Image', 'gen_image')],
-  [Markup.button.callback('🔤 Switch Font', 'font_menu')]
-]);
+  [Markup.button.callback('📢 Broadcast', 'admin_broadcast')],
+  [Markup.button.callback('🔤 Font Style', 'font_menu')],
+  [Markup.button.callback('👤 My Profile', 'my_profile')],
+  [Markup.button.callback('🧩 Riddle Game', 'game_riddle')],
+  [Markup.button.callback('🎲 Dice Game', 'game_dice')],
+  [Markup.button.callback('📚 Wikipedia', 'wiki')],
+  [Markup.button.callback('🧠 Summarize', 'summarize')],
+  [Markup.button.callback('🧾 JSON Viewer', 'json_view')],
+  [Markup.button.callback('🧮 JS Eval', 'eval_code')],
+  [Markup.button.callback('🕓 Uptime', 'uptime')]
+], { columns: 2 });
 
-// === Admin Menu Trigger ===
-bot.command('admin', (ctx) => {
-  if (!ADMINS.includes(ctx.from.id)) return ctx.reply('🚫 You are not authorized.');
-  ctx.replyWithMarkdown(adminMenuText, adminKeyboard);
-});
-bot.hears(/^\/$/, (ctx) => {
-  if (!ADMINS.includes(ctx.from.id)) return;
-  ctx.replyWithMarkdown(adminMenuText, adminKeyboard);
-});
-
-// === Admin Actions ===
-bot.action('admin_stats', (ctx) => {
-  if (!ADMINS.includes(ctx.from.id)) return ctx.answerCbQuery('🚫 Not authorized.');
-  const userIds = new Set(chatLogs.map(log => log.userId));
-  const recentChats = chatLogs.slice(-5).map(log => `🗨️ ${log.username}: ${log.message}`).join('\n');
-  ctx.replyWithMarkdown(
-    `📊 *Bot Stats:*\n👥 Unique Users: ${userIds.size}\n💬 Total Messages: ${chatLogs.length}\n\n📝 *Last 5 Messages:*\n${recentChats || 'None'}`
-  );
+bot.command('admin', ctx => {
+  if (!adminOnly(ctx)) return ctx.reply('🚫 Unauthorized');
+  ctx.reply('🔧 Admin Panel', adminPanel);
 });
 
-bot.action('admin_logs', (ctx) => {
-  if (!ADMINS.includes(ctx.from.id)) return ctx.answerCbQuery('🚫 Not authorized.');
-  if (!fs.existsSync(logFilePath)) return ctx.reply('🗃️ No logs found.');
-  ctx.replyWithDocument({ source: logFilePath, filename: 'chat_logs.json' });
+bot.action('admin_stats', ctx => {
+  if (!adminOnly(ctx)) return ctx.answerCbQuery('🚫');
+  const users = [...new Set(chatLogs.map(log => log.userId))];
+  const list = users.map(id => `- ⁣[⁣](tg://user?id=${id}) ⁣${id}`).join('\n');
+  ctx.reply(`📊 Users (${users.length}):\n${list}`);
 });
 
-bot.action('admin_clearlogs', (ctx) => {
-  if (!ADMINS.includes(ctx.from.id)) return ctx.answerCbQuery('🚫 Not authorized.');
-  chatLogs = [];
-  saveLogs();
-  ctx.reply('🗑️ Chat logs cleared.');
-});
-
-// === Image Prompt Generator ===
-bot.action('gen_image', async (ctx) => {
-  if (!ADMINS.includes(ctx.from.id)) return ctx.answerCbQuery('🚫 Not authorized.');
-  await ctx.reply('🖌️ Send a prompt to generate an image:');
+bot.action('admin_broadcast', ctx => {
+  if (!adminOnly(ctx)) return ctx.answerCbQuery('🚫');
+  ctx.reply('📢 Send the broadcast text:');
   bot.once('text', async (msgCtx) => {
-    const prompt = msgCtx.message.text;
-    msgCtx.sendChatAction('upload_photo');
-    try {
-      const res = await axios.get('https://api.giftedtech.co.ke/api/ai/image', {
-        params: { apikey: 'gifted', prompt }
-      });
-      if (res.data.url) {
-        await msgCtx.replyWithPhoto(res.data.url, {
-          caption: `🖼️ *Generated Image:*\n_${prompt}_`,
-          parse_mode: 'Markdown'
-        });
-      } else {
-        msgCtx.reply('❌ Failed to generate image.');
-      }
-    } catch {
-      msgCtx.reply('❌ AI Image API failed.');
+    const msg = stylize(msgCtx.message.text);
+    const users = [...new Set(chatLogs.map(l => l.userId))];
+    for (let id of users) {
+      try { await bot.telegram.sendMessage(id, `📢 ${msg}`); } catch {}
     }
+    msgCtx.reply('✅ Sent!');
   });
 });
 
-// === Font Switch Menu ===
-bot.action('font_menu', (ctx) => {
-  if (!ADMINS.includes(ctx.from.id)) return ctx.answerCbQuery('🚫 Not authorized.');
+bot.action('font_menu', ctx => {
   const buttons = Object.keys(fonts).map(name => Markup.button.callback(name, `font_${name}`));
-  ctx.reply('🔤 Choose font style:', Markup.inlineKeyboard(buttons, { columns: 2 }));
+  ctx.reply('🔤 Choose font:', Markup.inlineKeyboard(buttons, { columns: 3 }));
 });
-bot.action(/font_.+/, (ctx) => {
-  if (!ADMINS.includes(ctx.from.id)) return ctx.answerCbQuery('🚫 Not authorized.');
-  const font = ctx.match[0].replace('font_', '');
+
+bot.action(/^font_.+/, ctx => {
+  const font = ctx.match[0].split('_')[1];
   currentFont = font;
   saveFont(font);
   ctx.editMessageText(`✅ Font switched to *${font}*`, { parse_mode: 'Markdown' });
 });
 
-// === Termux Commands ===
-if (isTermux) {
-  bot.command('battery', (ctx) => {
-    exec('termux-battery-status', (err, stdout) => {
-      if (err) return ctx.reply('❌ Battery info not available.');
-      const info = JSON.parse(stdout);
-      ctx.replyWithMarkdown(`🔋 *Battery Info:*\nLevel: ${info.percentage}%\nStatus: ${info.status}`);
-    });
-  });
+bot.action('uptime', ctx => {
+  const s = Math.floor(process.uptime());
+  ctx.reply(`🕓 Uptime: ${Math.floor(s / 3600)}h ${(s % 3600) / 60 | 0}m ${s % 60}s`);
+});
 
-  bot.command('device', (ctx) => {
-    exec('termux-telephony-deviceinfo', (err, stdout) => {
-      if (err) return ctx.reply('❌ Device info not available.');
-      ctx.replyWithMarkdown(`📱 *Device Info:*\n\n\`\`\`${stdout}\`\`\``, { parse_mode: 'Markdown' });
-    });
-  });
+bot.action('my_profile', (ctx) => {
+  const { id, username, first_name, last_name } = ctx.from;
+  ctx.reply(`👤 *Profile:*
+ID: \`${id}\`
+Username: @${username || 'none'}
+Name: ${first_name || ''} ${last_name || ''}`, { parse_mode: 'Markdown' });
+});
 
-  bot.command('location', (ctx) => {
-    exec('termux-location', (err, stdout) => {
-      if (err) return ctx.reply('❌ Location error.');
-      const data = JSON.parse(stdout);
-      ctx.reply(`📍 Location:\nLatitude: ${data.latitude}\nLongitude: ${data.longitude}`);
-    });
+bot.action('game_riddle', ctx => {
+  ctx.reply("🧩 What has to be broken before you can use it?\n\nReply with your answer:");
+  bot.once('text', answerCtx => {
+    if (/egg/i.test(answerCtx.message.text)) {
+      answerCtx.reply('✅ Correct! It\'s an egg.');
+    } else {
+      answerCtx.reply('❌ Nope. It\'s an egg.');
+    }
   });
-} else {
-  bot.command(['battery', 'device', 'location'], (ctx) => {
-    ctx.reply('⚠️ This command only works inside Termux.');
-  });
-}
+});
 
-// === AI Text Fallback Handling ===
+bot.action('game_dice', ctx => ctx.replyWithDice());
+
+bot.action('wiki', ctx => {
+  ctx.reply('📚 Send topic to search on Wikipedia:');
+  bot.once('text', async (msgCtx) => {
+    try {
+      const query = encodeURIComponent(msgCtx.message.text);
+      const res = await axios.get(`https://en.wikipedia.org/api/rest_v1/page/summary/${query}`);
+      msgCtx.reply(`📖 ${res.data.title}:\n${res.data.extract}`);
+    } catch {
+      msgCtx.reply('❌ Not found.');
+    }
+  });
+});
+
+bot.action('summarize', ctx => {
+  ctx.reply('🧠 Send a long text to summarize:');
+  bot.once('text', async (msgCtx) => {
+    const input = msgCtx.message.text;
+    try {
+      const res = await axios.post('https://free.churchless.tech/v1/chat/completions', {
+        model: 'gpt-3.5-turbo',
+        messages: [{ role: 'user', content: `Summarize this:\n\n${input}` }]
+      }, { headers: { 'Content-Type': 'application/json' } });
+      msgCtx.reply(res.data.choices[0].message.content);
+    } catch {
+      msgCtx.reply('❌ Failed to summarize.');
+    }
+  });
+});
+
+bot.action('json_view', ctx => {
+  ctx.reply('🧾 Send valid JSON to format:');
+  bot.once('text', (msgCtx) => {
+    try {
+      const parsed = JSON.parse(msgCtx.message.text);
+      msgCtx.replyWithMarkdown('```json\n' + JSON.stringify(parsed, null, 2) + '\n```');
+    } catch {
+      msgCtx.reply('❌ Invalid JSON.');
+    }
+  });
+});
+
+bot.action('eval_code', ctx => {
+  ctx.reply('🧠 Send JS code to evaluate:');
+  bot.once('text', (msgCtx) => {
+    try {
+      const result = eval(msgCtx.message.text);
+      msgCtx.replyWithMarkdown(`✅ Result:\n\n\`\`\`${result}\`\`\``);
+    } catch (err) {
+      msgCtx.reply(`❌ Error:\n${err.message}`);
+    }
+  });
+});
+
+// === AI Chat ===
 const aiEndpoints = [
   'https://api.giftedtech.co.ke/api/ai/gpt4o',
   'https://api.giftedtech.co.ke/api/ai/geminiaipro',
@@ -175,64 +177,23 @@ const aiEndpoints = [
 ];
 
 bot.on('text', async (ctx) => {
-  await ctx.sendChatAction('typing');
-  const userMessage = ctx.message.text;
-  const username = ctx.from.username || `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim() || 'Unknown';
   const userId = ctx.from.id;
-
-  let aiReply = "🤖 I couldn't generate a response.";
-
-  for (let url of aiEndpoints) {
+  const username = ctx.from.username || ctx.from.first_name || 'User';
+  const msg = ctx.message.text;
+  let reply = '🤖 No response.';
+  for (const url of aiEndpoints) {
     try {
-      const res = await axios.get(url, {
-        params: { apikey: 'gifted', q: userMessage },
-        timeout: 5000
-      });
+      const res = await axios.get(url, { params: { apikey: 'gifted', q: msg } });
       if (res.data.result) {
-        aiReply = res.data.result;
+        reply = res.data.result;
         break;
       }
     } catch {}
   }
-
-  if (aiReply.includes("couldn't")) {
-    try {
-      const res = await axios.post('https://free.churchless.tech/v1/chat/completions', {
-        model: 'gpt-3.5-turbo',
-        messages: [{ role: 'user', content: userMessage }]
-      }, {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 10000
-      });
-      aiReply = res.data.choices?.[0]?.message?.content || aiReply;
-    } catch {}
-  }
-
-  ctx.reply(stylize(aiReply));
-  chatLogs.push({ time: new Date().toISOString(), userId, username, message: userMessage, response: aiReply });
+  ctx.reply(stylize(reply));
+  chatLogs.push({ time: new Date().toISOString(), userId, username, message: msg, response: reply });
   saveLogs();
 });
 
-// === AI Image Vision Handler ===
-bot.on('photo', async (ctx) => {
-  const fileId = ctx.message.photo.pop().file_id;
-  const fileLink = await ctx.telegram.getFileLink(fileId);
-  ctx.sendChatAction('typing');
-
-  try {
-    const res = await axios.get('https://api.giftedtech.co.ke/api/ai/vision', {
-      params: {
-        apikey: 'gifted',
-        url: fileLink.href,
-        prompt: 'Describe in detail what is in the picture, including objects, atmosphere and mood of the picture'
-      }
-    });
-    ctx.reply(stylize(res.data.result || '🖼️ No description returned.'));
-  } catch {
-    ctx.reply(stylize('⚠️ Failed to describe the image.'));
-  }
-});
-
-// === Start Server ===
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Bot running on port ${PORT}`));
