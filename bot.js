@@ -32,6 +32,7 @@ function saveLogs() {
 bot.start((ctx) => {
   ctx.reply('👋 Welcome! I am your AI bot. Type any question, and I’ll reply!');
 });
+
 bot.help((ctx) => {
   ctx.reply('💡 Just send me a message and I’ll reply using GiftedTech AI.');
 });
@@ -63,7 +64,7 @@ bot.command('location', (ctx) => {
   });
 });
 
-// Text message handler
+// Text message handler (Main AI logic)
 bot.on('text', async (ctx) => {
   try {
     await ctx.sendChatAction('typing');
@@ -74,12 +75,19 @@ bot.on('text', async (ctx) => {
     const res = await axios.get('https://api.giftedtech.co.ke/api/ai/openai', {
       params: { apikey: 'gifted', q: userMessage }
     });
-    
-    const aiReply = response.data.result || "🤖 I couldn't generate a response.";
+
+    const aiReply = res.data.result || "🤖 I couldn't generate a response.";
     ctx.reply(aiReply);
 
     // Save logs
-    chatLogs.push({ time: new Date().toISOString(), userId, username, message: userMessage, response: aiReply });
+    chatLogs.push({
+      time: new Date().toISOString(),
+      userId,
+      username,
+      message: userMessage,
+      response: aiReply
+    });
+
     saveLogs();
   } catch (err) {
     console.error(err.message);
@@ -91,4 +99,4 @@ bot.on('text', async (ctx) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Bot running on port ${PORT}`);
-});1
+});
