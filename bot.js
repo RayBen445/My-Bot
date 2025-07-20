@@ -113,7 +113,7 @@ bot.on('photo', async (ctx) => {
     ctx.reply('⚠️ Failed to describe the image.');
   }
 });
-*/
+
 
 // === Start Express Server ===
 const PORT = process.env.PORT || 3000;
